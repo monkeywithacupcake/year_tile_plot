@@ -1,0 +1,105 @@
+# from https://restateinsight.com/posts/general-posts/2024-12-github-contributions-plot/
+
+`%||%` <- function(a, b) {
+  if(is.null(a)) b else a
+}
+
+GeomRtile <- ggplot2::ggproto(
+  "GeomRtile", 
+  statebins:::GeomRrect, # 1) only change compared to ggplot2:::GeomTile
+  
+  extra_params = c("na.rm"),
+  setup_data = function(data, params) {
+    data$width <- data$width %||% params$width %||% resolution(data$x, FALSE)
+    data$height <- data$height %||% params$height %||% resolution(data$y, FALSE)
+    
+    transform(data,
+              xmin = x - width / 2,  xmax = x + width / 2,  width = NULL,
+              ymin = y - height / 2, ymax = y + height / 2, height = NULL
+    )
+  },
+  default_aes = ggplot2::aes(
+    fill = "grey20", colour = NA, size = 0.1, linetype = 1,
+    alpha = NA, width = NA, height = NA
+  ),
+  required_aes = c("x", "y"),
+  
+  # These aes columns are created by setup_data(). They need to be listed here so
+  # that GeomRect$handle_na() properly removes any bars that fall outside the defined
+  # limits, not just those for which x and y are outside the limits
+  non_missing_aes = c("xmin", "xmax", "ymin", "ymax"),
+  draw_key = draw_key_polygon
+)
+
+geom_rtile <- function(mapping = NULL, data = NULL,
+                       stat = "identity", position = "identity",
+                       radius = grid::unit(6, "pt"), # 2) add radius argument
+                       ...,
+                       na.rm = FALSE,
+                       show.legend = NA,
+                       inherit.aes = TRUE) {
+  ggplot2::layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomRtile,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = rlang::list2(
+      radius = radius,
+      na.rm = na.rm,
+      ...
+    )
+  )
+}
+
+
+# and now a function that makes a pretty contributions graph
+
+make_like_gh_graph <- function(contributions,
+                               fill_palette = c('Blues','BuGn','BuPu','GnBu','Greens','Greys','Oranges','OrRd','PuBu','PuBuGn','PuRd','Purples','RdPu','Reds','YlGn','YlGnBu','YlOrBr','YlOrRd')) {
+  # Find the positions of the month labels
+  fill_palette <- match.arg(fill_palette,
+                            several.ok = FALSE)
+  tab <- contributions |> 
+    summarise(nmin = min(n_week), .by = "month")
+  
+  ggplot(contributions, aes(n_week, weekday_label)) +
+    geom_rtile(
+      aes(fill = n),
+      color = NA,#"black",# "white",
+      radius = unit(2, "pt"),
+      width = 0.9,
+      height = 0.9
+    ) +
+    # Highlight the months on the horizontal axis
+    scale_x_continuous(
+      breaks = tab$nmin,
+      labels = as.character(tab$month),
+      position = "top",
+      expand = c(0, 0)
+    ) +
+    # Highlight days of the week on the vertical axis
+    scale_y_discrete(breaks = c("Mon", "Wed", "Fri")) +
+    # Adjust color palette
+    scale_fill_distiller(
+      palette = fill_palette,
+      direction = 1,
+      na.value = "gray90") +
+    # Removes x and y labels
+    labs(x = NULL, y = NULL) +
+    # Removes the color legend
+    guides(fill = "none") +
+    theme_minimal() +
+    theme(
+      panel.grid = element_blank(),
+      text = element_text(color = "gray10")
+    )
+}
+
+make_and_export_gh_graph <- function(df, path) {
+  png(filename=path, width=1000, height=200)
+  print(make_like_gh_graph(contributions = df))
+  dev.off()
+}

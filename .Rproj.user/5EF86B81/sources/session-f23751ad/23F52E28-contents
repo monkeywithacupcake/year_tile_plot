@@ -1,0 +1,80 @@
+# from https://restateinsight.com/posts/general-posts/2024-12-github-contributions-plot/
+
+# make a ggplot heatmap like github conribution
+library(tidyverse)
+library(lubridate)
+
+
+# Tibble that contains all days of the year
+contributions <- expand_grid(
+  date = seq(as.Date("2024-01-01"), as.Date("2024-12-31"), by = "1 day")
+)
+
+# Function to simulate number of contributions conditional on workday
+sample_contribution <- Vectorize(function(x) {
+  if (x == 1) {
+    # Normal day of work
+    rpois(1, 6.5)
+  } else {
+    # Small chance of working overtime on weekends or holidays
+    sample(c(0, 1, 2), 1, prob = c(0.9, 0.05, 0.05))
+  }}
+)
+
+contributions <- contributions |> 
+  mutate(
+    n_week = week(date),
+    n_day = wday(date, week_start = 7),
+    weekday_label = wday(date, week_start = 7, label = TRUE, abbr = TRUE),
+    weekday_label = fct_rev(weekday_label),
+    month = month(date, label = TRUE, abbr = TRUE),
+    is_weekday = if_else(n_day == 7 | n_day == 1, 0L, 1L),
+    n = sample_contribution(is_weekday)
+  ) |> 
+  mutate(
+    n = if_else(n == 0, NA, n),
+    n_week = if_else(n_day == 1, n_week + 1, n_week)
+  )
+
+stop()
+day_df <- peloton_df %>%
+  group_by(date) %>% tally() %>%ungroup()
+df <- make_contribution_df(year = 2024, 
+                           day_df = day_df)
+make_contribution_df <- function(year = 2024, day_df){
+  # day_df has to have cols date and n
+  stopifnot("must have date and n as colnames" = c("date","n") %in% names(day_df)) 
+  yr_df <- expand_grid(
+    date = seq(as.Date(paste0(year,"-01-01")),
+               as.Date(paste0(year,"-12-31")), 
+               by = "1 day")
+  )
+  yr_df |>
+    dplyr::left_join(dplyr::select(day_df, date, n)) |> 
+    dplyr::mutate(
+      n_week = week(date),
+      n_day = lubridate::wday(date, week_start = 7),
+      weekday_label = lubridate::wday(date, week_start = 7, 
+                                      label = TRUE, abbr = TRUE),
+      weekday_label = forcats::fct_rev(weekday_label),
+      month = month(date, label = TRUE, abbr = TRUE),
+      is_weekday = if_else(n_day == 7 | n_day == 1, 0L, 1L)
+    ) |> 
+    mutate(
+      n = if_else(n == 0, NA, n),
+      n_week = if_else(n_day == 1, n_week + 1, n_week)
+    )
+}
+
+
+stop()
+# this is how you actually get the plot to look right
+# get the geom_rtile()
+source("~/r_projects/geom_rtile.R")
+
+
+png(filename="my_graph.png", width=1000, height=200)
+make_like_gh_graph(df, fill_palette = "RdPu")
+dev.off()
+
+make_and_export_gh_graph(contributions, "fake_graph.png")

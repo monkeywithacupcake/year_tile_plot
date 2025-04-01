@@ -1,0 +1,367 @@
+# test
+
+library(tidyverse)
+
+# the year
+
+this_year <- 2024
+
+
+source("functions/peloton.R")
+source("functions/strava.R")
+peloton_df <- clean_peloton_file(fpath = file.path("data", "peloton.csv"),
+                                 this_year = this_year)
+
+# strava 
+strava_df <- clean_strava_file(fpath = file.path("data","activities.csv"), 
+                               this_year= this_year,
+                               this_tz = "America/Los_Angeles")
+actv_df <- strava_df %>%
+  filter(!type %in% "Workout") %>% # delete whatever this is
+  mutate(x = ifelse(type == 'Peloton Ride', paste(date, round(distance,1)), NA)) 
+
+actv_df <- actv_df %>%
+  bind_rows(peloton_df %>%
+              mutate(month = lubridate::month(date, label=TRUE),
+                     x = ifelse(type == 'Cycling',
+                                paste(date, round(distance,1)), NA)) %>%
+              filter(is.na(x) | !x %in% actv_df$x) %>%
+              mutate(type = ifelse(type == 'Cycling', 'Peloton Ride', type))
+            ) %>%
+  select(-x) %>%
+  mutate(group = case_when(
+    grepl("Ride", type) ~ "Ride",
+    type %in% c("Stretching", "Cardio", "Meditation") ~ "Other",
+    .default = type)
+  )
+
+
+mean(actv_df$duration)
+#[1] 28.66017
+actv_df %>% group_by(date) %>% summarise(duration = sum(duration), wo = n())
+
+daily_df <- actv_df %>% 
+  group_by(date, type) %>% 
+  summarise(duration = sum(duration), .groups = "drop") %>%
+  pivot_wider(names_from = type, values_from = duration) %>%
+  left_join(
+    actv_df %>% 
+      group_by(date) %>% 
+      summarise(day_total = sum(duration), .groups = "drop")
+  )
+
+ggplot(daily_df, aes(x = date, y = day_total/60, fill = month(date))) +
+  geom_col()
+
+ddf <- actv_df %>% 
+  group_by(month, date, group) %>% 
+  summarise(duration = sum(duration), .groups = "drop") %>%
+  group_by(date) %>% mutate(dtot = sum(duration, na.rm = TRUE)) %>% ungroup() %>%
+  group_by(month) %>% mutate(avg = mean(dtot, na.rm = TRUE),
+                             y_max = max(3, max(duration/60))) %>% ungroup() %>%
+  mutate(lbl = paste(str_pad(month(date), 2, "left", "0"),
+                     month,"~ avg:", round(avg, 0), "min"))
+groupcolors <- data.frame(
+  group = c("Hike", "Walk", "Run", "Ride", "Yoga", "Strength", "Other"),
+  color = c("#4daf4a","#beaed4","#984ea3", "#375eb8", "#f9bb90","#0af9fa","#909090")
+)
+ddf$group <- factor(ddf$group, levels=groupcolors$group)
+ggplot(ddf, aes(x = date, y = duration/60, fill = group)) +
+  geom_col() +
+  geom_line(data = ddf, aes(x = date, y = avg/60)) +
+  labs(title = "My Active Days, 2024",
+       subtitle = paste("Avg activity duration:", round(mean(actv_df$duration, na.rm = TRUE),0), "min |",
+                        "Avg daily total duration:", round(mean(ddf$dtot, na.rm = TRUE),0)),
+       caption = "includes only activities tracked in peloton or strava apps, duplicates removed",
+    x = "", y = "Hours of Activity",fill = "")+
+  scale_fill_manual(labels = groupcolors$group, values = groupcolors$color) +
+  scale_x_date(date_labels = "%d") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  facet_wrap(.~lbl, scales = "free") +
+  geom_blank(aes(y = y_max)) +
+  guides(fill=guide_legend(nrow=1,byrow=TRUE))
+
+## trash
+
+# make a plot
+
+mycolors <- data.frame(
+  type = c("Hike", "Walk", "Run", "Ride", "E-Bike Ride", "Peloton Ride"),
+  color = c("#4daf4a","#beaed4","#984ea3", "#375eb8", "#377eb8","#80b1d3")
+)
+df <- actv_df %>%
+  filter(type %in% mycolors$type)
+# df$type <- factor(case_when(!df$type %in% mycolors$type ~ "Other",
+#                             .default = df$type), 
+#                             levels=mycolors$type)
+df$type <- factor(df$type, 
+                  levels=mycolors$type)
+tmp <- df %>%
+  filter(!is.na(type)) %>%
+  group_by(month, type) %>%
+  summarise(distance = sum(distance, na.rm = TRUE), # miles
+            elev = sum(elev, na.rm = TRUE),         # ?
+            time = sum(duration, na.rm = TRUE)/60,    # hours
+            avgpace = mean(pace, na.rm = TRUE), # min/mile
+            count = n(),
+            .groups = "drop")
+month_plot <- ggplot(tmp, aes(month, distance, fill = type)) + 
+  geom_col() +
+  labs(#title = "Sport Log 2022, distance by type",
+    x = "",
+    y = "Distance (in Miles)") +
+  scale_fill_manual(labels = mycolors$type, values = mycolors$color) +
+  theme_minimal() +
+  theme(legend.position="top", legend.title=element_blank()) + 
+  guides(fill = guide_legend(nrow = 1))
+
+ggplot(tmp, aes(month, elev, fill = type)) + 
+  geom_col() +
+  labs(#title = "Sport Log 2023, elevation by type",
+       x = "",
+       y = "Elevation Gain (in Feet)") +
+  scale_fill_manual(labels = mycolors$type, values = mycolors$color) +
+  theme_minimal() +
+  theme(legend.position="top", legend.title=element_blank())
+ggplot(tmp, aes(month, elev, fill = type)) + 
+  geom_col() +
+  labs(title = "Sport Log 2024, elevation by type",
+       x = "",
+       y = "Elevation Gain (in Feet)") +
+  scale_fill_manual(labels = mycolors$type, values = mycolors$color) +
+  theme_minimal() +
+  theme(legend.position="top", legend.title=element_blank())
+
+ggplot(tmp, aes(month, count, fill = type)) + 
+  geom_col() +
+  labs(title = "Sport Log 2024, activity count by type",
+       x = "",
+       y = "Activities Logged (count)") +
+  scale_fill_manual(labels = mycolors$type, values = mycolors$color) +
+  theme_minimal() +
+  theme(legend.position="top", legend.title=element_blank())
+ggplot(tmp, aes(month, time, fill = type)) + 
+  geom_col() +
+  labs(title = "Sport Log 2024, time by type",
+       x = "",
+       y = "Time Spent (Hours)") +
+  scale_fill_manual(labels = mycolors$type, values = mycolors$color) +
+  theme_minimal() +
+  theme(legend.position="top", legend.title=element_blank())
+
+# average pace by type
+pace_plot <- ggplot(tmp, aes(type, avgpace, color = type)) + 
+  geom_point(alpha = 0.4, size = 5) +
+  labs(#title = "Sport Log 2022, pace by type",
+    x = "",
+    y = "Average Pace (minutes per mile)") +
+  scale_x_discrete(labels = function(type) str_wrap(type, width = 10)) +
+  scale_color_manual(labels = mycolors$type, values = mycolors$color) +
+  theme_minimal() +
+  theme(legend.position="none", legend.title=element_blank())
+
+# run miles speed
+# avg this year 
+
+speed_plot <- ggplot(df, aes(distance, pace, color = type)) + 
+  geom_point(alpha = .5, size = 5) +
+  labs(#title = "Sport Log 2022, running distance by speed",
+    # subtitle = paste("Average run pace:",round(avg_run_pace, 1),"minutes per mile"), 
+    y = "Pace (minutes per mile)",
+    x = "Length (in miles)") +
+  scale_color_manual(labels = mycolors$type, values = mycolors$color) +
+  theme_minimal() +
+  theme(legend.position="none", legend.title=element_blank())
+
+
+#weather plot
+# tmp <- df %>%
+#   group_by(condition, type) %>%
+#   summarise(distance = sum(distance), # miles
+#             elev = sum(elev),         # ?
+#             time = sum(time)/3600,    # hours
+#             avgpace = mean(pace, na.rm = TRUE), # min/mile
+#             count = n(),
+#             .groups = "drop")
+# ggplot(tmp, aes(condition, distance, fill = type)) + 
+#   geom_col() +
+#   labs(title = "Sport Log 2022, distance by type by weather condition",
+#        x = "",
+#        y = "Length (in Miles)") +
+#   scale_fill_manual(labels = mycolors$type, values = mycolors$color) +
+#   theme_minimal() +
+#   theme(legend.position="top", legend.title=element_blank())
+ggplot(filter(df, temp < 100 & !is.na(condition)), aes(month, temp, color = condition, size = distance)) +
+  geom_jitter(alpha = .5) +
+  labs(title = "Sport Log 2024, distance by weather condition",
+       x = "",
+       y = "Temp (F)") +
+  theme_minimal() +
+  theme(legend.position="top", legend.title=element_blank())
+
+type_totals <- df %>% 
+  group_by(type) %>%
+  summarise(d = paste(scales::label_comma()(sum(distance, na.rm = TRUE)), "miles")) %>%
+  mutate(i = row_number(),
+         w = paste0(type,": ", d))
+tot_plot <-   ggplot(type_totals, aes(0,i, label=w)) +
+  geom_text(hjust = 0, size = 4, color = "grey20") +
+  scale_x_continuous(limits = c(0,1),
+                     expand = expansion(mult = c(0, 0))) +
+  expand_limits(x=c(0,1)) +
+  theme_void() +
+  labs(title = "~ Mile Totals ~") + 
+  theme(legend.position="none")
+
+
+tmp_yr <- tmp %>%
+  group_by(type) %>%
+  summarise(time = mean(time, na.rm= TRUE),    # hours
+            activities = mean(count),
+            months = sum(tmp$type == type),
+            distance = mean(df$distance[df$type == type]),
+            max = max(df$distance[df$type == type]),
+            .groups = "drop") %>%
+  left_join(type_totals)
+act_plot <- 
+  ggplot(tmp_yr, aes(x = type, y = 1, color = type)) +
+  geom_point(alpha = 0.4, size = 7) +
+  geom_label(aes(label = paste0(w, " total", "\n~",
+                                "avg ",round(distance)," miles each effort\n~",
+                                "farthest: ",round(max)," miles\n~",
+                                round(activities)," ",type,"s per month \n~",
+                                months," months active"))) +
+  scale_color_manual(labels = mycolors$type, values = mycolors$color) +
+  theme_void() +
+  theme(legend.position="none", legend.title=element_blank()) +
+  coord_flip()
+
+
+foot_miles <- scales::label_comma()(sum(filter(df, type %in% c("Run","Hike","Walk"))$distance))
+bike_miles <- scales::label_comma()(sum(filter(df, type %in% c("Ride","E-Bike Ride", "Peloton Ride"))$distance))
+foot_hours <- scales::label_comma()(sum(filter(df, type %in% c("Run","Hike","Walk"))$duration/60))
+bike_hours <- scales::label_comma()(sum(filter(df, type %in% c("Ride","E-Bike Ride", "Peloton Ride"))$duration/60))
+
+
+library(patchwork)
+
+layout <- "
+AAAABB
+CCDDBB
+"
+patchwork <- month_plot + act_plot + pace_plot + speed_plot + 
+  plot_layout(design = layout)
+patchwork <- patchwork + plot_annotation(
+  title = paste('Sport Log - 2024', nrow(df), 'Tracked Activities!'),
+  theme = theme(plot.title = element_text(size = 18,face = "bold")),
+  subtitle = paste0('This year, I moved myself ', 
+                    foot_miles, 
+                    ' miles on foot (',
+                    foot_hours,
+                    ' hours) and ', 
+                    bike_miles,
+                    ' miles on bike (',
+                    bike_hours,
+                    ' hours). \nColor is type of activity'),
+  caption = paste("Races this year: Ragnar August; \n",
+                  "Excludes non-moving activities, like strength training (",
+                  sum(actv_df$type == "Strength"),
+                  ") and yoga (",
+                  sum(actv_df$type == "Yoga"),").")
+)
+patchwork
+
+ggsave(filename = "sportlog2024.jpg",
+       plot = patchwork, 
+       device = "jpeg",
+       width = 10,
+       height = 10,
+       path = "~/Desktop")
+
+
+# make just a run one
+tmp <- df %>%
+  filter(type == "Run") %>%
+  group_by(month) %>%
+  summarise(distance = sum(distance), # miles
+            elev = sum(elev),         # ?
+            time = sum(duration)/60,    # hours
+            avgpace = mean(pace, na.rm = TRUE), # min/mile
+            count = n(),
+            .groups = "drop")
+month_plot <- ggplot(tmp, aes(month, distance)) + 
+  geom_col(fill = mycolors$color[mycolors$type=="Run"]) +
+  geom_text(aes(label = paste0(round(distance),"\nmiles")),
+            nudge_y = 6,
+            color = mycolors$color[mycolors$type=="Run"]) +
+  labs(x = "", y = "Distance (in Miles)") +
+  scale_fill_manual(labels = mycolors$type, values = mycolors$color) +
+  expand_limits(y=100)+
+  theme_minimal() +
+  theme(legend.position="none", legend.title=element_blank(),
+        axis.title.y =element_blank(),
+        axis.text.y =element_blank(),
+        axis.ticks.y=element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) 
+avg_run_pace <- mean(filter(df, type == "Run")$pace)
+w <- df %>%
+  filter(type == "Run") %>%
+  summarise(time = sum(duration),
+            distance = sum(distance),
+            pace = (time)/distance)
+run_plot <- ggplot(filter(df, type == "Run"), aes(distance, pace)) + 
+  geom_point(color = mycolors$color[mycolors$type=="Run"],alpha = .5, size = 5) +
+  labs(#title = "Sport Log 2022, running distance by speed",
+    subtitle = paste("Average run pace:",round(avg_run_pace, 1),"minutes per mile"), 
+    y = "Pace (minutes per mile)",
+    x = "Length (in miles)") +
+  theme_minimal() +
+  theme(legend.position="none", legend.title=element_blank())
+library(patchwork)
+p <- month_plot + inset_element(run_plot, left = 0, bottom = 0.6, right = .55, top = .9) 
+
+p <- p + plot_annotation(
+  title = paste('Run Log - 2024', sum(df$type=="Run"), 'Tracked Runs!'),
+  theme = theme(plot.title = element_text(size = 18,face = "bold")),
+  subtitle = paste0('This year, I ran ', 
+                    scales::label_comma()(sum(tmp$distance)), 
+                    ' miles (',
+                    scales::label_comma()(sum(tmp$time)),
+                    ' hours) '),
+  caption = 'Races this year: Ragnar Trail Rainier'
+)
+p
+
+ggsave(filename = "runlog2024.jpg",
+       plot = p, 
+       device = "jpeg",
+       width = 10,
+       height = 8,
+       path = "~/Desktop")
+
+
+hike<- filter(df, type == "Hike") %>% arrange(desc(elev))
+#hike22<- filter(df22, type == "Hike") %>% arrange(desc(elev))
+
+###
+
+words_df <- strava_df %>% 
+  select(date,name) %>%
+  mutate(default = grepl("^Morning|^Lunch|^Afternoon|^Evening|^Night|^Nike Run Club|^[0-9]", 
+                         name))
+table(words_df$default)
+sample(words_df$name[!words_df$default], 5)
+# library(tm)
+# library(wordcloud)
+# ww <- tm_map(Corpus(VectorSource(tolower(words_df$ttl[!words_df$default]))), removePunctuation)  
+# ww <- tm_map(ww, function(x)removeWords(x,c("the","walk","lunch",stopwords())))
+# wordcloud(ww)
+
+sum(grepl("\\(P", peloton$`Workout Timestamp`))
+sum(grepl("[0-9]\\)$", peloton$`Workout Timestamp`))
+
+peloton$`Workout Timestamp`[!grepl("\\(P|[0-9]\\)$",peloton$`Workout Timestamp`)]
+
+
