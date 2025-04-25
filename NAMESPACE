@@ -2,9 +2,13 @@
 
 export(geom_rtile)
 export(make_and_export_year_tile_png)
+export(make_empty_year_df)
 export(make_year_df)
 export(make_year_tile_plot)
 import(ggplot2)
+importFrom(dplyr,join_by)
+importFrom(dplyr,left_join)
+importFrom(dplyr,mutate)
 importFrom(dplyr,summarise)
 importFrom(grDevices,dev.off)
 importFrom(grDevices,png)

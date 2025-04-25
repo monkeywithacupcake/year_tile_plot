@@ -4,12 +4,18 @@
 \alias{make_year_df}
 \title{Make Year DF}
 \usage{
-make_year_df(year = 2024, day_df)
+make_year_df(df, year = 2024, date_var = "date", n_var = "n")
 }
 \arguments{
+\item{df}{data.frame with data to plot.
+If omitted, returns make_empty_year_df() which
+you can join manually to an n}
+
 \item{year}{numeric defaults to 2024}
 
-\item{day_df}{data.frame expected to have cols date and n}
+\item{date_var}{string should reresent the date var}
+
+\item{n_var}{string should represent the counter to be plotted}
 }
 \value{
 data.frame with columns needed for year_tile_plot
@@ -22,5 +28,5 @@ fake <- data.frame(
 date = seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "1 day"),
  n = sample(x = 0:10, size = 365, replace = TRUE)
 )
-make_year_df(year = 2023, day_df = fake)
+make_year_df(year = 2023, df = fake)
 }
