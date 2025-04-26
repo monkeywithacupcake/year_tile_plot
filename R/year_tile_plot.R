@@ -21,15 +21,15 @@
 #'  n = sample(x = 0:10, size = 365, replace = TRUE)
 #' )
 #' # will print a distorted year tile plot (too)
-#' make_year_tile_png(df = make_year_df(year = 2023, fake))
-#' # should have dimensions width = 5xheight to look correct
+#' make_year_tile_plot(year_df = make_year_df(df = fake, year = 2023))
+# should have dimensions width = 5xheight to look correct
 #'}
 make_year_tile_plot <- function(year_df,
                                fill_palette = c('Blues','BuGn','BuPu','GnBu','Greens','Greys','Oranges','OrRd','PuBu','PuBuGn','PuRd','Purples','RdPu','Reds','YlGn','YlGnBu','YlOrBr','YlOrRd')) {
-  # Find the positions of the month labels
+
   fill_palette <- match.arg(fill_palette,
                             several.ok = FALSE)
-  tab <- year_df |>
+  tab <- year_df |> # Find the positions of the month labels
     dplyr::summarise(nmin = min(n_week), .by = "month")
 
   ggplot2::ggplot(year_df, ggplot2::aes(n_week, weekday_label)) +
@@ -55,10 +55,9 @@ make_year_tile_plot <- function(year_df,
       na.value = "gray90") +
     # Removes x and y labels
     ggplot2::labs(x = NULL, y = NULL) +
-    # Removes the color legend
-    ggplot2::guides(fill = "none") +
     ggplot2::theme_minimal() +
     ggplot2::theme(
+      legend.position = "none",
       panel.grid = ggplot2::element_blank(),
       text = ggplot2::element_text(color = "gray10")
     )

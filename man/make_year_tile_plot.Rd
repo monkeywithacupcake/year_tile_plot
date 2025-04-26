@@ -37,7 +37,6 @@ date = seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by = "1 day"),
  n = sample(x = 0:10, size = 365, replace = TRUE)
 )
 # will print a distorted year tile plot (too)
-make_year_tile_png(df = make_year_df(year = 2023, fake))
-# should have dimensions width = 5xheight to look correct
+make_year_tile_plot(year_df = make_year_df(df = fake, year = 2023))
 }
 }

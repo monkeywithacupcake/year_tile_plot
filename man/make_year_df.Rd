@@ -13,15 +13,17 @@ you can join manually to an n}
 
 \item{year}{numeric defaults to 2024}
 
-\item{date_var}{string should reresent the date var}
+\item{date_var}{string should represent the date var}
 
-\item{n_var}{string should represent the counter to be plotted}
+\item{n_var}{string should represent the counter to be plotted
+#'}
 }
 \value{
 data.frame with columns needed for year_tile_plot
 }
 \description{
-Make Year DF
+Note that you do not have to make this intermediate
+data frame. See the example in `make_year_tile_plot()`.
 }
 \examples{
 fake <- data.frame(

@@ -1,14 +1,15 @@
 #' Make Year DF
 #'
+#' Note that you do not have to make this intermediate
+#' data frame. See the example in `make_year_tile_plot()`.
+#'
 #' @param df data.frame with data to plot.
 #' If omitted, returns make_empty_year_df() which
 #' you can join manually to an n
 #' @param year numeric defaults to 2024
-#' @param date_var string should reresent the date var
+#' @param date_var string should represent the date var
 #' @param n_var string should represent the counter to be plotted
-#'
-#' @importFrom dplyr mutate join_by left_join
-#'
+#'#'
 #' @return data.frame with columns needed for year_tile_plot
 #' @export
 #'
@@ -38,9 +39,9 @@ make_year_df <- function(df, year = 2024, date_var = "date", n_var = "n"){
   )
   tmp <- aggregate(n ~ date, tmp, sum)
 
-  yr_df <- make_empty_year_df(year) |>
-    dplyr::left_join(tmp, by = dplyr::join_by(date)) |>
-    dplyr::mutate(n = ifelse(n == 0, NA, n))
+  yr_df <- make_empty_year_df(year)
+  yr_df <- merge(yr_df, tmp, all.x = TRUE)
+  yr_df$n <- ifelse(yr_df$n ==0, NA, yr_df$n)
 
   return(yr_df)
 
@@ -52,6 +53,9 @@ make_year_df <- function(df, year = 2024, date_var = "date", n_var = "n"){
 #'
 #' @return data.frame with columns needed for year_tile_plot
 #' @export
+#'
+#' @importFrom dplyr mutate
+#' @importFrom lubridate week wday month
 #'
 #' @examples
 #' tmp <- make_empty_year_df()
@@ -73,9 +77,10 @@ make_empty_year_df <- function(year = 2024){
       n_week = ifelse(n_day == 1, n_week + 1, n_week),
       weekday_label = lubridate::wday(date, week_start = 7,
                                       label = TRUE, abbr = TRUE),
-      weekday_label = forcats::fct_rev(weekday_label),
+      #weekday_label = forcats::fct_rev(weekday_label),
       month = lubridate::month(date, label = TRUE, abbr = TRUE),
       is_weekday = ifelse(n_day == 7 | n_day == 1, 0L, 1L)
     )
+  yr_df$weekday_label <- factor(yr_df$weekday_label, levels = rev(levels(yr_df$weekday_label)))
   return(yr_df)
 }
